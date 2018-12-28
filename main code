@@ -1,0 +1,279 @@
+#include "EV3_FileIO.c";
+#include "EV3Servo-lib-UW.c";
+
+
+//Adam VanEgdom
+void gripperCtr (bool shut, bool longer)
+//opens and shuts gripper
+{
+	const int ENC_LIM_OPEN_SMALL = -45;
+	const int ENC_LIM_CLOSE_SMALL = 50;
+	const int ENC_LIM_OPEN_BIG = -100;
+	const int ENC_LIM_CLOSE_BIG = 105;
+
+	nMotorEncoder[motorC] = 0;
+
+	if (shut) // indicates that the gripper is closing
+	{
+		if (longer) // indicates a long wall
+		{
+			motor[motorC] = 10;
+			while (nMotorEncoder[motorC] < ENC_LIM_CLOSE_BIG)
+			{}
+		}
+
+		else
+		{
+			motor[motorC] = 10;
+			while (nMotorEncoder[motorC] < ENC_LIM_CLOSE_SMALL)
+			{}
+		}
+	}
+
+	else //indicate that the gripper is opening
+	{
+		if (longer) //determines whether it is a short or long wall
+		{
+			motor[motorC] = -10;
+			while (nMotorEncoder[motorC] > ENC_LIM_OPEN_BIG)
+			{}
+		}
+
+		else
+		{
+			motor[motorC] = -10;
+			while (nMotorEncoder[motorC] > ENC_LIM_OPEN_SMALL)
+			{}
+		}
+	}
+
+	motor[motorC] = 0;
+}
+//Adam VanEgdom
+void pickUpPos (int wallNumber, int speed)
+{
+	if (wallNumber == 2)
+	{
+		time1[T1] = 0;
+		while(time1[T1] < 2000)
+		{
+			motor[motorB]= speed;
+		}
+		motor[motorB]=0;
+	}
+	else if (wallNumber == 3)
+	{
+		time1[T1] = 0;
+		while(time1[T1] < 1100)
+		{
+			motor[motorB]=speed;
+		}
+		motor[motorB]=0;
+	}
+
+	else if (wallNumber == 4)
+	{
+		time1[T1] = 0;
+		while(time1[T1] < 500)
+		{
+			motor[motorB]=speed;
+		}
+		motor[motorB]=0;
+	}
+}
+
+// Amy Dwyer
+void armVerticalMovement(int verticalDirection)
+// integer value 1 if up, 0 if down
+{
+	// function lifts and descends arm in the vertical direction
+
+	time1[T1] = 0;
+
+	if (verticalDirection == 1)
+	{
+		// move system upwards for 1.5 seconds with motor power 10
+
+		while (time1[T1] < 1500)
+		{
+			motor[motorA] = 10;
+		}
+	}
+
+	else
+	{
+		// move system downwards for 1.5 seconds with negative 10 motor power
+
+		while (time1[T1] < 3000)
+		{
+			motor[motorA] = -5;
+		}
+	}
+	motor[motorA] = 0;
+}
+
+// Camille Walters
+float getCoordinate(int wallNumber, bool x)
+{
+
+	TFileHandle fin;
+	bool fileOkay = openReadPC (fin,"House.txt");
+	while(!fileOkay)
+	{
+		displayBigTextLine(3, "File failed to open");
+		wait1Msec(100);
+	}
+
+	float info[3]={0,0,0};
+
+	do
+	{
+		for(int i = 0; i < 3; i ++)
+		{
+			float num = 0;
+			readFloatPC(fin,num);
+
+			info[i] = num;
+
+
+		}
+	} while (info[0]!= wallNumber);
+
+	displayString(8,"%f , %f", info[1], info[2]);
+	if(x)
+		return info[1];
+	else
+		return info[2];
+
+
+}
+
+//Camille Walters
+void shutdown()
+{
+	while (SensorValue[S3]==0)
+	{
+		motor[motorB]=10;
+	}
+	armVerticalMovement(0);
+	gripperCtr(0,1);
+}
+
+//Camille's Motion Function
+void motion(int wallNumber)
+{
+	float x = getCoordinate(wallNumber, 1);
+	float y = getCoordinate(wallNumber, 0);
+
+	displayString(2, "%f", x);
+	wait10Msec(10);
+	displayString(3, "%f", y);
+	wait10Msec(10);
+
+
+	gripperCtr(0,10); //standard opening procedure
+	pickUpPos (wallNumber,-10);
+	armVerticalMovement(0);
+	if(wallNumber<=2)
+		gripperCtr(1,1);
+	else
+		gripperCtr(1,0);
+	armVerticalMovement(1);
+	pickUpPos(wallNumber,10);
+
+	setServoSpeed(S2, 1, -35); //goes
+	setServoSpeed(S2, 2, 35);
+	wait1Msec(x);
+	setServoSpeed(S2, 1, -3);
+	setServoSpeed(S2, 2, -5);
+	wait1Msec(1000);//stop
+
+	nMotorEncoder[motorB]=0;
+	while(nMotorEncoder[motorB]>-(y*360/PI*1.5))//horizontal motion
+	{
+		motor[motorB]=-20;
+	}
+	motor[motorB]=0;
+	armVerticalMovement(0);//place wall
+	if(wallNumber<=2)
+		gripperCtr(0,1);
+	else
+		gripperCtr(0,0);
+
+	//begin return path
+		armVerticalMovement(1);
+		gripperCtr(1,1);
+
+	nMotorEncoder[motorB]=0;
+	while(nMotorEncoder[motorB]<y*360/PI*1.5)
+	{
+		motor[motorB]=20;
+	}
+	motor[motorB]=0;
+	setServoSpeed(S2, 1, 35);//goes
+	setServoSpeed(S2, 2, -35);
+	wait1Msec(x);
+	setServoSpeed(S2, 1, -3);
+	setServoSpeed(S2, 2, -5);
+	wait1Msec(1000);//stop
+/*
+	setServoSpeed(S2, 1, -1*x);
+	setServoSpeed(S2, 2, x);
+
+	wait1Msec(2500);//turns it off
+	setServoSpeed(S2, 1, -3);
+	setServoSpeed(S2, 2, -5);
+
+
+
+	setServoSpeed(S2, 1, x);
+	setServoSpeed(S2, 2, -1*x);
+
+	wait1Msec(2500);//turns it off
+	setServoSpeed(S2, 1, -3);
+	setServoSpeed(S2, 2, -5);
+*/
+}
+
+
+// Bilal
+
+void moveback (int status)
+{
+	if (status == -1)
+	{
+	setServoSpeed(S2, 1, 35);
+	setServoSpeed(S2, 2, -35);
+	wait1Msec(600);
+	setServoSpeed(S2, 1, -35);
+	setServoSpeed(S2, 2, 35);
+	wait1Msec(600);
+	}
+
+	else if (status == -1)
+	{
+	setServoSpeed(S2, 1, -35);
+	setServoSpeed(S2, 2, 35);
+	wait1Msec(600);
+	setServoSpeed(S2, 1, 35);
+	setServoSpeed(S2, 2, -35);
+	wait1Msec(600);
+}
+
+}
+}
+
+task main()
+{
+	SensorType[S4] = sensorEV3_Touch;
+	while (!getButtonPress(buttonDown))// shutdown function will be called if down button is pressed
+	{
+		for (int wallNumber = 1; wallNumber < 5; wallNumber++)//yo wtf
+		{
+			motion(wallNumber);
+			while(!getButtonPress(buttonEnter))//Middle button must be pressed for the program to continue
+			{}
+		}
+	}
+	shutdown();
+}
